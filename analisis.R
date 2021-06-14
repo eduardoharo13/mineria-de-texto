@@ -16,7 +16,12 @@ library(quanteda)
 library(stringr)
 library(broom)
 library(tidyr)
-library(tidyverse)
+library(tidyverse) 
+library(tidytext)
+library(topicmodels)
+library(doParallel)
+library(scales)
+library(slam)
 
 charlot<-read.csv("D:/Maestria_Estadistica_PUCP/III-ciclo/temas en estadistica contemporanea/charlotesville/aug15_sample/aug15_sample.csv",header = T, sep=",")
 
@@ -119,17 +124,47 @@ wordcloud(terms_vec,term_frequency, scale=c(8,.2),min.freq=100,max.words=Inf, ra
 #############################
 ########Topic modelling#####
 ###########################
-library(topicmodels)
-library(doParallel)
-library(scales)
+# Determinar el Numero de Topicos
+library(ldatuning)
 
-#Hacemos validación cruzada para obtener el número de tópicos a utilizar
-burnin = 1000
-iter = 1000
-keep = 50
+result <- FindTopicsNumber(
+  charlot_dtm,
+  topics = seq(from = 2, to = 40, by = 1),
+  metrics = c("Griffiths2004", "CaoJuan2009", "Arun2010", "Deveaud2014"),
+  method = "Gibbs",
+  control = list(seed = 77),
+  mc.cores = 6L,
+  verbose = TRUE
+)
+
+FindTopicsNumber_plot(result)
+
+#El método de Griffiths 2004 da como número de topicos óptimo  29
+result[which(result$Griffiths2004==max(result$Griffiths2004),arr.ind = T),]$topics
+
+#El método de CaoJuan2009 da como número de topicos óptimo  38
+result[which(result$CaoJuan2009==min(result$CaoJuan2009),arr.ind = T),]$topics
+
+#El método de CaoJuan2009 da como número de topicos óptimo  40
+result[which(result$Arun2010==min(result$Arun2010),arr.ind = T),]$topics
+
+#Para propósitos de este trabajo se selecciona 29 tópicos
+
+#Tambien realizamos la validación con el índice de perplejidad
+#con los métodos de gibbs y tópicos correlacionados (ctm)
+
+
+##############################
+###########Estimacion#########
+##############################
 
 #Creamos la data de entrenamiento y prueba
 n <- nrow(charlot_dtm)
+#Se eliminan las filas vacias
+sel_idx <- slam::row_sums(charlot_dtm) > 0
+charlot_dtm <- charlot_dtm[sel_idx, ]
+
+#se realiza el split de la data
 splitter <- sample(1:n, round(n * 0.75))
 train_set <- charlot_dtm[splitter, ]
 valid_set <- charlot_dtm[-splitter, ]
@@ -139,17 +174,18 @@ fitted<-list()
 perp_train<-list()
 perp_test<-list()
 
-#Realizamos el cálculo por el método de estimación de Gibbs
-for (i in 2:20){
+
+
+for (i in 2:30){
 fitted[[i]] <- LDA(train_set, k = i, method = "Gibbs",
-              control = list(burnin = burnin, iter = iter, keep = keep) )
+              control = list(burnin =1000, iter = 500, keep = 50) )
 perp_train[[i]]<-perplexity(fitted[[i]], newdata = train_set)
 perp_test[[i]]<-perplexity(fitted[[i]], newdata = valid_set)
 }
 
 
 mod_gibbs= as.data.frame(do.call(rbind, lapply(perp_test, unlist)))
-mod_gibbs$numero<-cbind(2:20)
+mod_gibbs$numero<-cbind(2:30)
 mod_gibbs$numero[mod_gibbs$V1==min(mod_gibbs$V1)]
 
 #Realizamos el cálculo por el método de topicos correlacionados (CTM) usando VEM
@@ -157,20 +193,20 @@ fitted_ctm<-list()
 perp_train_ctm<-list()
 perp_test_ctm<-list()
 
-for (i in 2:20){
-  fitted_ctm[[i]] <- CTM(train_set, k = i, control=list(seed=S,var=list(tol=tt),
-                                                    em=list(tol=10*tt)))
+for (i in 2:30){
+  fitted_ctm[[i]] <- CTM(train_set, k = i, control=list(seed=2021,var=list(tol=10^-4),
+                                                    em=list(tol=10*10^-4)))
   perp_train_ctm[[i]]<-perplexity(fitted_ctm[[i]], newdata = train_set)
   perp_test_ctm[[i]]<-perplexity(fitted_ctm[[i]], newdata = valid_set)
 }
 
 
 mod_ctm= as.data.frame(do.call(rbind, lapply(perp_test_ctm, unlist)))
-mod_ctm$numero<-cbind(2:20)
+mod_ctm$numero<-cbind(2:30)
 mod_ctm$numero[mod_ctm$V1==min(mod_ctm$V1)]
 
 #Ambos modelos dan un menor puntaje al indice de perplejidad por lo que 
-# se decide utilizar 20 tópicos
+# se decide utilizar 29 tópicos
 
 
 
@@ -178,31 +214,46 @@ mod_ctm$numero[mod_ctm$V1==min(mod_ctm$V1)]
 #######Estimación##############
 ###############################
 
-#Se eliminan las filas vacias
-sel_idx <- slam::row_sums(charlot_dtm) > 0
-charlot_dtm <- charlot_dtm[sel_idx, ]
-
-
-# Número de temas
-K <- 20
-#Definimos una semilla
-S = 2021
-#Tolerancia
-tt = 10^-4
 #Estimamos tanto el modelo mediante el método de Gibbs como el CTM
-charlot_tm=list(R1=LDA(charlot_dtm,k=20,method="Gibbs",
+charlot_tm=list(R1=LDA(charlot_dtm,k=29,method="Gibbs",
                    control=list(seed=S,burnin=500,thin=100,iter=500)),
-                R2=CTM(charlot_dtm,k=20,control=list(seed=S,var=list(tol=tt),
-                                             em=list(tol=10*tt))))
+                R2=CTM(charlot_dtm,k=29,control=list(seed=2021,var=list(tol=10^-4),
+                                             em=list(tol=10*10^-4))))
 
-#Términos del modelo obtenidos mediante el método de estimación de Gibbs
-terms(charlot_tm$R1, 20)
-#Términos del modelo obtenidos mediante el método CTM
-terms(charlot_tm$R2, 20)
+#Primeros 8 términos obtenidos del método de estimación de Gibbs
+terms(charlot_tm$R1,8)
+#Primeros 8 términos obtenidos del  método CTM
+terms(charlot_tm$R2,8)
 
 
+##Método de Gibbs
+# Probabilidad tema por palabra
+charlot_tm_gibbs_beta <- tidy(charlot_tm[["R1"]], matrix = "beta")
+glimpse(charlot_tm_beta)
 
-# Probabilidad topico 
-charlot_tm_gamma <- tidy(charlot_tm[["R1"]]@gamma, matrix = "gamma")
+# Probabilidad topico por documento
+charlot_tm_gibbs_gamma <- tidy(charlot_tm[["R1"]], matrix = "gamma")
 glimpse(charlot_tm_gamma)
+
+
+##Método CTM
+# Probabilidad tema por palabra
+charlot_tm_ctm_beta <- tidy(charlot_tm[["R2"]], matrix = "beta")
+glimpse(charlot_tm_beta)
+
+# Probabilidad topico por documento
+charlot_tm_ctm_gamma <- tidy(charlot_tm[["R2"]], matrix = "gamma")
+glimpse(charlot_tm_gamma)
+
+
+# principales terminos en cada topico
+charlot_tm_gibbs_beta %>% 
+  group_by(topic) %>%
+  top_n(6) %>%
+  ungroup() %>%
+  arrange(topic, -beta) %>% # vamos a mostrarlo como grafico
+  ggplot(aes(x=reorder(term, (beta)),y=beta)) + 
+  geom_col() +
+  facet_wrap(~topic, scales = "free_y") +
+  coord_flip()
 
