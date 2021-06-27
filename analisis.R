@@ -176,7 +176,7 @@ perp_test<-list()
 
 
 
-for (i in 2:30){
+for (i in 2:29){
 fitted[[i]] <- LDA(train_set, k = i, method = "Gibbs",
               control = list(burnin =1000, iter = 500, keep = 50) )
 perp_train[[i]]<-perplexity(fitted[[i]], newdata = train_set)
@@ -185,7 +185,7 @@ perp_test[[i]]<-perplexity(fitted[[i]], newdata = valid_set)
 
 
 mod_gibbs= as.data.frame(do.call(rbind, lapply(perp_test, unlist)))
-mod_gibbs$numero<-cbind(2:30)
+mod_gibbs$numero<-cbind(2:29)
 mod_gibbs$numero[mod_gibbs$V1==min(mod_gibbs$V1)]
 
 #Realizamos el cálculo por el método de topicos correlacionados (CTM) usando VEM
@@ -193,7 +193,8 @@ fitted_ctm<-list()
 perp_train_ctm<-list()
 perp_test_ctm<-list()
 
-for (i in 2:30){
+for (i in 2:29){
+  
   fitted_ctm[[i]] <- CTM(train_set, k = i, control=list(seed=2021,var=list(tol=10^-4),
                                                     em=list(tol=10*10^-4)))
   perp_train_ctm[[i]]<-perplexity(fitted_ctm[[i]], newdata = train_set)
@@ -202,7 +203,7 @@ for (i in 2:30){
 
 
 mod_ctm= as.data.frame(do.call(rbind, lapply(perp_test_ctm, unlist)))
-mod_ctm$numero<-cbind(2:30)
+mod_ctm$numero<-cbind(2:29)
 mod_ctm$numero[mod_ctm$V1==min(mod_ctm$V1)]
 
 #Ambos modelos dan un menor puntaje al indice de perplejidad por lo que 
