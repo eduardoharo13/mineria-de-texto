@@ -57,9 +57,31 @@ sw<-c(sw,"via","just","amp")
 removeURL <- function(x) gsub("http[^[:space:]]*", "", x)
 #Función para remover caracteres especiales
 removecaract<- function(x){
-  gsub("/"," ", x)
-  gsub("@", " ", x)
-  gsub("\\|", " ", x)
+  gsub("/","", x)
+  gsub("@","", x)
+  gsub("\\|","", x)
+  #Removemos los retweets
+  gsub("(RT|via)((?:\\b\\W*@\\w+)+)","",x)
+  #Removemos los nombres de los usuarios de twitter
+  gsub("@\\w+","", x)
+  #Removemos los link html
+  gsub("\\bhttp[a-zA-Z0-9]*\\b","", x)
+  #Removemos los caracteres no alfanuméricos
+  gsub("[^a-zA-Z0-9 ]", "", x)
+  #Removemos signos de puntuación
+  gsub("[[:punct:]]", "", x)
+  #Removemos los acortadores de enlaces de twitter (t.co)
+  gsub("\\btco[a-zA-Z0-9]*\\b","", x)
+  #Removemos emoticons
+  iconv(x, 'UTF-8', 'ASCII')
+  #Removemos espacios y tabuladores
+  gsub("[ \t]{2,}", "", x)
+  #Removemos caracters especiales
+  gsub("˜‚","", x)
+  gsub(" ˜‚","", x)
+  gsub("‘","", x)
+  gsub("˜‚ ˜‚ ˜‚ ","",x)
+  
 }
 
 clean_corpus <- function(corpus){
@@ -77,10 +99,10 @@ clean_corp <-clean_corpus(charlot_corpus)
 
 
 # Mostrar los tweets limpios
-clean_corp[[1]][1]
+clean_corp[[5]][1]
 
 # Mostrar el texto original
-charlot$full_text[1]
+charlot$full_text[5]
 
 
 # Crear un Document Term Matrix (DTM)                    
@@ -247,14 +269,27 @@ charlot_tm_ctm_gamma <- tidy(charlot_tm[["R2"]], matrix = "gamma")
 glimpse(charlot_tm_gamma)
 
 
-# principales terminos en cada topico
+# principales terminos en cada topico (método Gibbs)
 charlot_tm_gibbs_beta %>% 
   group_by(topic) %>%
-  top_n(6) %>%
+  top_n(8) %>%
   ungroup() %>%
   arrange(topic, -beta) %>% # vamos a mostrarlo como grafico
   ggplot(aes(x=reorder(term, (beta)),y=beta)) + 
   geom_col() +
   facet_wrap(~topic, scales = "free_y") +
   coord_flip()
+
+
+# principales terminos en cada topico (método CTM)
+charlot_tm_ctm_beta %>% 
+  group_by(topic) %>%
+  top_n(8) %>%
+  ungroup() %>%
+  arrange(topic, -beta) %>% # vamos a mostrarlo como grafico
+  ggplot(aes(x=reorder(term, (beta)),y=beta)) + 
+  geom_col() +
+  facet_wrap(~topic, scales = "free_y") +
+  coord_flip()
+
 
